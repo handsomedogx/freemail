@@ -1,10 +1,7 @@
 name: 🔄 Sync with Upstream
 
 on:
-  schedule:
-    # 每天 UTC 时间 00:00 运行一次自动同步（北京时间早上 8:00）
-    - cron: '0 0 * * *'
-  # 允许在 GitHub Actions 页面手动点击运行
+  # 仅允许在 GitHub Actions 页面手动点击运行，避免自动同步覆盖或冲突二开改动
   workflow_dispatch:
 
 jobs:

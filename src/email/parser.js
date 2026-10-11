@@ -6,14 +6,15 @@
 import PostalMime from 'postal-mime';
 
 /**
- * 解析邮件正文，提取文本和HTML内容
+ * 解析邮件内容，提取已解码的主题、文本和HTML内容
  * @param {string} raw - 原始邮件内容 (EML 格式)
- * @returns {Promise<object>} 包含 text 和 html 属性的对象
+ * @returns {Promise<object>} 包含 subject、text 和 html 属性的对象
  */
 export async function parseEmailBody(raw) {
-  if (!raw) return { text: '', html: '' };
+  if (!raw) return { subject: '', text: '', html: '' };
   const email = await PostalMime.parse(raw);
   return {
+    subject: email.subject || '',
     text: email.text || '',
     html: email.html || '',
   };

@@ -23,7 +23,7 @@ export async function handleEmailEvent(message, env, ctx) {
     const headers = message.headers;
     const toHeader = headers.get('to') || headers.get('To') || '';
     const fromHeader = headers.get('from') || headers.get('From') || '';
-    const subject = headers.get('subject') || headers.get('Subject') || '(无主题)';
+    let subject = headers.get('subject') || headers.get('Subject') || '(无主题)';
 
     let envelopeTo = '';
     try {
@@ -59,6 +59,7 @@ export async function handleEmailEvent(message, env, ctx) {
       rawBuffer = await resp.arrayBuffer();
       const rawText = new TextDecoder().decode(rawBuffer);
       const parsed = await parseEmailBody(rawText);
+      subject = parsed.subject || subject;
       textContent = parsed.text || '';
       htmlContent = parsed.html || '';
       if (!textContent && !htmlContent) textContent = (rawText || '').slice(0, 100000);

@@ -110,6 +110,31 @@ export async function listApiMailboxes(db, { apiKeyId, limit = 100 }) {
   }));
 }
 
+export async function renewApiMailbox(db, {
+  apiKeyId,
+  resourceId,
+  ttlSeconds
+}) {
+  const current = await getApiMailbox(db, { apiKeyId, resourceId });
+  if (!current) return null;
+  if (current.status === 'expired') return { ...current, renewed: false };
+
+  const expiresAt = new Date(Date.now() + Number(ttlSeconds) * 1000).toISOString();
+  const result = await db.prepare(`
+    UPDATE mailboxes
+    SET expires_at = ?, last_accessed_at = CURRENT_TIMESTAMP
+    WHERE id = (
+      SELECT mailbox_id FROM api_mailboxes
+      WHERE resource_id = ? AND api_key_id = ?
+      LIMIT 1
+    )
+  `).bind(expiresAt, String(resourceId || ''), Number(apiKeyId)).run();
+
+  if (Number(result?.meta?.changes || 0) <= 0) return null;
+  const updated = await getApiMailbox(db, { apiKeyId, resourceId });
+  return updated ? { ...updated, renewed: true } : null;
+}
+
 export async function deleteApiMailbox(db, r2, { apiKeyId, resourceId }) {
   const row = await db.prepare(`
     SELECT am.resource_id, m.id AS mailbox_id, m.address

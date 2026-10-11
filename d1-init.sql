@@ -131,7 +131,35 @@ CREATE TABLE IF NOT EXISTS api_mailboxes (
   FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS api_idempotency_keys (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  api_key_id    INTEGER NOT NULL,
+  operation     TEXT    NOT NULL,
+  key_hash      TEXT    NOT NULL,
+  request_hash  TEXT    NOT NULL,
+  resource_id   TEXT    NOT NULL,
+  created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(api_key_id, operation, key_hash),
+  FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS api_audit_logs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  api_key_id    INTEGER,
+  action        TEXT    NOT NULL,
+  resource_type TEXT,
+  resource_id   TEXT,
+  status        TEXT    NOT NULL DEFAULT 'success',
+  metadata_json TEXT,
+  created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash             ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_enabled          ON api_keys(enabled);
 CREATE INDEX IF NOT EXISTS idx_api_mailboxes_key         ON api_mailboxes(api_key_id, resource_id);
 CREATE INDEX IF NOT EXISTS idx_api_mailboxes_mailbox     ON api_mailboxes(mailbox_id);
+CREATE INDEX IF NOT EXISTS idx_api_idempotency_lookup    ON api_idempotency_keys(api_key_id, operation, key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_idempotency_resource  ON api_idempotency_keys(api_key_id, resource_id);
+CREATE INDEX IF NOT EXISTS idx_api_audit_key_created     ON api_audit_logs(api_key_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_audit_action_created  ON api_audit_logs(action, created_at DESC);

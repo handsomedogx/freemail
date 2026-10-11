@@ -40,6 +40,7 @@ D1 只保存 API Key 的 SHA-256 哈希，不保存明文。
 ```bash
 curl -X POST "https://your-domain.example/api/v1/mailboxes" \
   -H "Authorization: Bearer $MAIL_API_KEY" \
+  -H "Idempotency-Key: signup-task-001" \
   -H "Content-Type: application/json" \
   -d '{"ttl": 600}'
 ```
@@ -59,6 +60,14 @@ curl -X POST "https://your-domain.example/api/v1/mailboxes" \
 
 可选指定 `domain` 和 `local`。`domain` 必须属于 `MAIL_DOMAIN` 配置；`local` 仅允许字母、数字和下划线。
 
+推荐 Agent 在创建邮箱时始终发送 `Idempotency-Key`。同一个 API Key 使用相同幂等键和相同创建参数重试时，会返回原邮箱而不会重复创建，并带响应头：
+
+```text
+Idempotency-Replayed: true
+```
+
+若复用同一个幂等键但修改了 `ttl`、`domain` 或 `local`，接口返回 `409 idempotency_conflict`。服务端只保存幂等键的 SHA-256，不保存明文。
+
 ## 3. 查询邮箱
 
 ```bash
@@ -75,7 +84,27 @@ curl "https://your-domain.example/api/v1/mailboxes?limit=100" \
 
 不同 API Key 之间不能查询或删除彼此创建的邮箱。
 
-## 4. 删除邮箱
+## 4. Lease：续期与释放
+
+续期会从当前时间重新计算 TTL；已经过期的邮箱不会被复活：
+
+```bash
+curl -X POST "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/renew" \
+  -H "Authorization: Bearer $MAIL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"ttl": 600}'
+```
+
+Agent 用完邮箱后推荐主动 release：
+
+```bash
+curl -X POST "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/release" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+release 会删除邮箱、邮件元数据、对应 R2 EML，以及该邮箱关联的幂等记录。
+
+原有 DELETE 接口继续兼容：
 
 ```bash
 curl -X DELETE "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID" \
@@ -158,6 +187,24 @@ curl -X DELETE "https://your-domain.example/api/v1/admin/api-keys/1" \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
+## 8. 审计日志
+
+Mail API 会记录结构化审计事件，包括邮箱创建/重放、续期、释放、邮件读取以及 wait 命中/超时。严格管理员可查询：
+
+```bash
+curl "https://your-domain.example/api/v1/admin/audit-logs?limit=100" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+可使用 `api_key_id` 和 `action` 精确筛选，例如：
+
+```bash
+curl "https://your-domain.example/api/v1/admin/audit-logs?action=messages.wait&api_key_id=1" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+审计 metadata 不写入邮件正文、验证码或 API Key 明文。
+
 ## 当前 V1 范围
 
-当前版本已完成 API Key、邮箱资源隔离、真实 TTL、邮件读取、验证码/链接提取和短轮询等待接口。下一阶段会增加 Webhook/事件通知、租约/幂等性、审计日志以及 MCP 工具层。
+当前版本已完成 API Key、邮箱资源隔离、真实 TTL、邮件读取、验证码/链接提取、短轮询等待、幂等创建、Lease 续期/释放与审计日志。下一阶段可进入 MCP 工具层，并视需要增加 Webhook/事件通知与 Rate Limit。

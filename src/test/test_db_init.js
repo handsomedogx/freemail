@@ -27,7 +27,14 @@ await test('API 扩展表已存在时不重复执行运行时 DDL', async () => 
       return {
         async all() {
           assert(String(sql).includes('sqlite_master'), '应通过 sqlite_master 检查表是否存在');
-          return { results: [{ name: 'api_keys' }, { name: 'api_mailboxes' }] };
+          return {
+            results: [
+              { name: 'api_keys' },
+              { name: 'api_mailboxes' },
+              { name: 'api_idempotency_keys' },
+              { name: 'api_audit_logs' }
+            ]
+          };
         }
       };
     },
@@ -39,6 +46,30 @@ await test('API 扩展表已存在时不重复执行运行时 DDL', async () => 
   const result = await ensureApiTables(db);
   assert(result?.created === false, '已有表不应标记为新建');
   assert(execSql.length === 0, '已有 API 表时不应执行 CREATE TABLE');
+});
+
+await test('旧 API 库会仅补建幂等与审计表', async () => {
+  const execSql = [];
+  const db = {
+    prepare(sql) {
+      return {
+        async all() {
+          assert(String(sql).includes('sqlite_master'), '应通过 sqlite_master 检查表是否存在');
+          return { results: [{ name: 'api_keys' }, { name: 'api_mailboxes' }] };
+        }
+      };
+    },
+    async exec(sql) {
+      execSql.push(String(sql));
+    }
+  };
+
+  const result = await ensureApiTables(db);
+  assert(result?.created === true, '缺少第三阶段表时应触发补建');
+  assert(execSql.some(sql => /CREATE TABLE api_idempotency_keys/i.test(sql)), '应补建幂等表');
+  assert(execSql.some(sql => /CREATE TABLE api_audit_logs/i.test(sql)), '应补建审计表');
+  assert(!execSql.some(sql => /CREATE TABLE api_keys\b/i.test(sql)), '不应重建已有 api_keys');
+  assert(!execSql.some(sql => /CREATE TABLE api_mailboxes\b/i.test(sql)), '不应重建已有 api_mailboxes');
 });
 
 await test('可选 API schema 检查失败不会抛错拖垮旧 API', async () => {

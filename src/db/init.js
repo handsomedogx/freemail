@@ -89,7 +89,9 @@ export async function ensureApiTables(db) {
   try {
     existing = await db.prepare(`
       SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name IN ('api_keys', 'api_mailboxes')
+      WHERE type = 'table' AND name IN (
+        'api_keys', 'api_mailboxes', 'api_idempotency_keys', 'api_audit_logs'
+      )
     `).all();
   } catch (error) {
     throw withDbStage('check_api_tables', error);
@@ -131,6 +133,44 @@ export async function ensureApiTables(db) {
       created = true;
     } catch (error) {
       throw withDbStage('create_api_mailboxes', error);
+    }
+  }
+
+  if (!names.has('api_idempotency_keys')) {
+    try {
+      await db.exec(`CREATE TABLE api_idempotency_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      api_key_id INTEGER NOT NULL,
+      operation TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      resource_id TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(api_key_id, operation, key_hash),
+      FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE
+      );`);
+      created = true;
+    } catch (error) {
+      throw withDbStage('create_api_idempotency_keys', error);
+    }
+  }
+
+  if (!names.has('api_audit_logs')) {
+    try {
+      await db.exec(`CREATE TABLE api_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      api_key_id INTEGER,
+      action TEXT NOT NULL,
+      resource_type TEXT,
+      resource_id TEXT,
+      status TEXT NOT NULL DEFAULT 'success',
+      metadata_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL
+      );`);
+      created = true;
+    } catch (error) {
+      throw withDbStage('create_api_audit_logs', error);
     }
   }
 
@@ -181,6 +221,10 @@ async function createApiIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_enabled ON api_keys(enabled);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_key ON api_mailboxes(api_key_id, resource_id);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_mailbox ON api_mailboxes(mailbox_id);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_idempotency_lookup ON api_idempotency_keys(api_key_id, operation, key_hash);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_idempotency_resource ON api_idempotency_keys(api_key_id, resource_id);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_audit_key_created ON api_audit_logs(api_key_id, created_at DESC);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_audit_action_created ON api_audit_logs(action, created_at DESC);`);
 }
 
 async function createIndexes(db) {

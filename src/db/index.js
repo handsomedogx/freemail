@@ -40,6 +40,7 @@ export {
   createApiMailbox,
   getApiMailbox,
   listApiMailboxes,
+  renewApiMailbox,
   deleteApiMailbox,
   normalizeTtlSeconds,
   mailboxStatus
@@ -53,3 +54,13 @@ export {
   normalizeWaitOptions,
   waitForApiMessage
 } from './apiMessages.js';
+export {
+  normalizeIdempotencyKey,
+  fingerprintIdempotentRequest,
+  getIdempotencyRecord,
+  saveIdempotencyResult,
+  deleteIdempotencyForResource,
+  writeApiAuditLog,
+  safeWriteApiAuditLog,
+  listApiAuditLogs
+} from './apiOperations.js';

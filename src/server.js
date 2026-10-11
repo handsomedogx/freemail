@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from './middleware/app.js';
 import authRoutes from './routes/auth.js';
+import docsRoutes from './routes/docs.js';
 import mcpRoutes from './routes/mcp.js';
 import apiV1Routes from './routes/apiV1.js';
 import apiRoutes from './routes/api.js';
@@ -28,6 +29,9 @@ app.use('*', async (c, next) => {
 
 // 公开认证路由（/api/logout, /api/login）
 app.route('/', authRoutes);
+
+// 对外 REST API 文档（OpenAPI JSON + Swagger UI）
+app.route('/', docsRoutes);
 
 // Remote MCP（独立使用 fm_live_* Bearer API Key 鉴权）
 app.route('/', mcpRoutes);

@@ -10,7 +10,16 @@
 
 `本邮箱服务支持接收邮件时自动创建对应的邮箱，邮箱服务的转发目标邮箱地址需要在cloudflare Email Addresses中验证`
 
-📖 **[一键部署指南](docs/yijianbushu.md)** | 🤖 **[Github Action 部署指南](docs/action-deployment.md)** | 📬 **[Resend 发件配置](docs/resend.md)** | 🚀 **[SendFlare 发件配置](docs/sendflare.md)** | ☁️ **[Cyberpersons 发件配置](docs/cyberpersons.md)** | 📚 **[API 文档](docs/api.md)** | 🧩 **[Remote MCP](docs/mcp.md)**
+📖 **[一键部署指南](docs/yijianbushu.md)** | 🤖 **[Github Action 部署指南](docs/action-deployment.md)** | 📬 **[Resend 发件配置](docs/resend.md)** | 🚀 **[SendFlare 发件配置](docs/sendflare.md)** | ☁️ **[Cyberpersons 发件配置](docs/cyberpersons.md)** | 📚 **[API 文档](docs/api.md)** | 🔌 **[Mail API V1](docs/api-v1.md)** | 🧩 **[Remote MCP](docs/mcp.md)**
+
+### 开发者接口
+
+部署后会公开两套程序接口：
+
+- REST API：`/api/v1`，交互式 Swagger 文档：`/docs`，OpenAPI 规范：`/openapi.json`
+- Remote MCP：`/mcp`，使用方法见 [docs/mcp.md](docs/mcp.md)
+
+普通 Mail API 与 MCP 都复用 `fm_live_*` API Key；不要把明文 Key 提交进 Git。
 
 ## 📸 项目展示
 ### 体验地址： https://freemail.cq.de5.net

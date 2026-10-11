@@ -1,6 +1,15 @@
 # Mail API V1
 
-Freemail 的 API-first 接口，面向自动化程序、Agent 与未来 MCP 使用。
+Freemail 的 API-first 接口，面向自动化程序与 Agent，也是 Remote MCP 的底层邮件能力。
+
+部署后的在线接口文档：
+
+```text
+https://your-domain.example/docs
+https://your-domain.example/openapi.json
+```
+
+`/docs` 使用 Swagger UI，可点击 **Authorize** 填入 `fm_live_*` API Key，并直接通过 **Try it out** 调试 Mail API。
 
 ## 1. 创建 API Key
 

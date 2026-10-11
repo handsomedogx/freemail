@@ -22,8 +22,12 @@ router.post('/api/login', rateLimiter({ windowMs: 60_000, max: 10 }), async (c) 
   let DB;
   try {
     DB = await getInitializedDatabase(c.env);
-  } catch (_) {
-    return c.text('数据库连接失败', 500);
+  } catch (error) {
+    console.error('登录数据库初始化失败', {
+      stage: error?.dbStage || 'get_initialized_database',
+      message: String(error?.message || error || 'unknown database error')
+    });
+    return c.text('数据库初始化失败', 500);
   }
 
   const ADMIN_NAME = String(c.env.ADMIN_NAME || 'admin').trim().toLowerCase();

@@ -8,7 +8,7 @@ keep_vars=true
 [[d1_databases]]
 binding = "TEMP_MAIL_DB"
 database_name = "mail_free_db" #你的d1数据库名称
-database_id = "b6711963-dd4b-4071-a531-512317880c19" # 你的database_id
+database_id = "643cdd91-3116-4db8-9f78-68fcbe7f7db2" # 当前生产 D1 database_id
 # 登录会话过期时间（单位：天，默认7天）
 # 环境变量
 [vars]
@@ -37,6 +37,7 @@ binding = "ASSETS"
 binding = "MAIL_EML"
 bucket_name = "mail-eml"
 
-# wrangler.toml (wrangler v3.88.0^) 日志服务
-# [observability.logs]
-# enabled = true
+# Workers 日志：保持与 Cloudflare 仪表板设置一致，便于线上诊断。
+[observability.logs]
+enabled = true
+invocation_logs = true

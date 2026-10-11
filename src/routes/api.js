@@ -29,7 +29,15 @@ router.get('/api/session', (c) => {
 router.all('/api/*', async (c) => {
   const authPayload = c.get('authPayload');
   let DB;
-  try { DB = await getInitializedDatabase(c.env); } catch (_) { return c.text('数据库连接失败', 500); }
+  try {
+    DB = await getInitializedDatabase(c.env);
+  } catch (error) {
+    console.error('API 数据库初始化失败', {
+      stage: error?.dbStage || 'get_initialized_database',
+      message: String(error?.message || error || 'unknown database error')
+    });
+    return c.text('数据库初始化失败', 500);
+  }
 
   const MAIL_DOMAINS = (c.env.MAIL_DOMAIN || 'temp.example.com').split(/[,\s]+/).map(d => d.trim()).filter(Boolean);
   const baseOpts = {

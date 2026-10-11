@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node src/test/test_api_v1.js && node src/test/test_api_messages.js && node src/test/test_subject_decoding.js"
+    "test": "node src/test/test_api_v1.js && node src/test/test_api_messages.js && node src/test/test_db_init.js && node src/test/test_subject_decoding.js"
   },
   "dependencies": {
     "hono": "^4.12.18",

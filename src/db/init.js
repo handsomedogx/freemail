@@ -27,9 +27,20 @@ export async function initDatabase(db) {
     // 每次都确保外键约束开启
     await db.exec(`PRAGMA foreign_keys = ON;`);
   } catch (error) {
-    console.error('数据库初始化失败:', error);
+    console.error('数据库初始化失败', {
+      stage: error?.dbStage || 'init_database',
+      message: String(error?.message || error || 'unknown database initialization error'),
+      cause: error?.cause ? String(error.cause?.message || error.cause) : undefined
+    });
     throw error;
   }
+}
+
+function withDbStage(stage, error) {
+  const wrapped = new Error(String(error?.message || error || stage));
+  wrapped.dbStage = stage;
+  wrapped.cause = error;
+  return wrapped;
 }
 
 /**
@@ -38,23 +49,27 @@ export async function initDatabase(db) {
  * @returns {Promise<void>}
  */
 async function performFirstTimeSetup(db) {
-  // 快速检查：如果所有必要表存在，执行字段迁移后返回
+  // 仅把“核心表检查失败”视为需要初始化，避免把 API 扩展表/索引异常误判为核心库损坏。
+  let coreTablesReady = true;
   try {
     await db.prepare('SELECT 1 FROM mailboxes LIMIT 1').all();
     await db.prepare('SELECT 1 FROM messages LIMIT 1').all();
     await db.prepare('SELECT 1 FROM users LIMIT 1').all();
     await db.prepare('SELECT 1 FROM user_mailboxes LIMIT 1').all();
     await db.prepare('SELECT 1 FROM sent_emails LIMIT 1').all();
-    // 核心表存在后，补齐 API-first 扩展表并执行字段迁移
-    await ensureApiTables(db);
+  } catch (_) {
+    coreTablesReady = false;
+  }
+
+  if (coreTablesReady) {
+    // 旧站核心表存在时，字段迁移继续保持非致命；API-first 扩展也不能拖垮旧 API。
     await migrateMailboxesFields(db);
     await migrateSentEmailsFields(db);
-    await createIndexes(db);
+    await ensureOptionalApiSchema(db);
     return;
-  } catch (e) {
-    // 有表不存在，继续初始化
-    console.log('检测到数据库表不完整，开始初始化...');
   }
+
+  console.log('检测到数据库核心表不完整，开始初始化...');
   
   // 创建表结构（仅在表不存在时）- 包含新字段 forward_to 和 is_favorite
   await db.exec("CREATE TABLE IF NOT EXISTS mailboxes (id INTEGER PRIMARY KEY AUTOINCREMENT, address TEXT NOT NULL UNIQUE, local_part TEXT NOT NULL, domain TEXT NOT NULL, password_hash TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_accessed_at TEXT, expires_at TEXT, is_pinned INTEGER DEFAULT 0, can_login INTEGER DEFAULT 0, forward_to TEXT DEFAULT NULL, is_favorite INTEGER DEFAULT 0);");
@@ -62,18 +77,30 @@ async function performFirstTimeSetup(db) {
   await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT, role TEXT NOT NULL DEFAULT 'user', can_send INTEGER NOT NULL DEFAULT 0, mailbox_limit INTEGER NOT NULL DEFAULT 10, created_at TEXT DEFAULT CURRENT_TIMESTAMP);");
   await db.exec("CREATE TABLE IF NOT EXISTS user_mailboxes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, mailbox_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, is_pinned INTEGER NOT NULL DEFAULT 0, UNIQUE(user_id, mailbox_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE);");
   await db.exec("CREATE TABLE IF NOT EXISTS sent_emails (id INTEGER PRIMARY KEY AUTOINCREMENT, resend_id TEXT, from_name TEXT, from_addr TEXT NOT NULL, to_addrs TEXT NOT NULL, subject TEXT NOT NULL, html_content TEXT, text_content TEXT, status TEXT DEFAULT 'queued', scheduled_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, provider TEXT NOT NULL DEFAULT 'resend');");
-  await ensureApiTables(db);
-  
-  // 创建索引
-  await createIndexes(db);
+  await createCoreIndexes(db);
+  await ensureOptionalApiSchema(db);
 }
 
 /**
  * API-first 扩展表。与原用户/邮箱体系解耦，便于 Agent/API Key 独立授权。
  */
-async function ensureApiTables(db) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS api_keys (
+export async function ensureApiTables(db) {
+  let existing;
+  try {
+    existing = await db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name IN ('api_keys', 'api_mailboxes')
+    `).all();
+  } catch (error) {
+    throw withDbStage('check_api_tables', error);
+  }
+
+  const names = new Set((existing?.results || []).map(row => String(row.name || '')));
+  let created = false;
+
+  if (!names.has('api_keys')) {
+    try {
+      await db.exec(`CREATE TABLE api_keys (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       key_prefix TEXT NOT NULL,
@@ -83,11 +110,16 @@ async function ensureApiTables(db) {
       last_used_at TEXT,
       expires_at TEXT,
       enabled INTEGER NOT NULL DEFAULT 1
-    );
-  `);
+      );`);
+      created = true;
+    } catch (error) {
+      throw withDbStage('create_api_keys', error);
+    }
+  }
 
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS api_mailboxes (
+  if (!names.has('api_mailboxes')) {
+    try {
+      await db.exec(`CREATE TABLE api_mailboxes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       resource_id TEXT NOT NULL UNIQUE,
       api_key_id INTEGER NOT NULL,
@@ -95,15 +127,40 @@ async function ensureApiTables(db) {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE,
       FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
-    );
-  `);
+      );`);
+      created = true;
+    } catch (error) {
+      throw withDbStage('create_api_mailboxes', error);
+    }
+  }
+
+  return { created };
+}
+
+/**
+ * API-first 扩展属于可选能力：初始化失败时记录诊断信息，但不能让旧 Web/API 整站 500。
+ */
+export async function ensureOptionalApiSchema(db) {
+  try {
+    const result = await ensureApiTables(db);
+    // 正常部署由 d1-init.sql 创建表和索引；只有运行时实际补建了表时才补索引。
+    if (result?.created) await createApiIndexes(db);
+    return true;
+  } catch (error) {
+    console.error('API 扩展数据库初始化失败', {
+      stage: error?.dbStage || 'ensure_api_schema',
+      message: String(error?.message || error || 'unknown API schema error'),
+      cause: error?.cause ? String(error.cause?.message || error.cause) : undefined
+    });
+    return false;
+  }
 }
 
 /**
  * 创建数据库索引
  * @param {object} db - 数据库连接对象
  */
-async function createIndexes(db) {
+async function createCoreIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_mailboxes_address ON mailboxes(address);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_mailboxes_is_pinned ON mailboxes(is_pinned DESC);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_mailboxes_address_created ON mailboxes(address, created_at DESC);`);
@@ -117,10 +174,18 @@ async function createIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_resend_id ON sent_emails(resend_id);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_status_created ON sent_emails(status, created_at DESC);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_from_addr ON sent_emails(from_addr);`);
+}
+
+async function createApiIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_enabled ON api_keys(enabled);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_key ON api_mailboxes(api_key_id, resource_id);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_mailbox ON api_mailboxes(mailbox_id);`);
+}
+
+async function createIndexes(db) {
+  await createCoreIndexes(db);
+  await createApiIndexes(db);
 }
 
 /**

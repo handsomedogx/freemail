@@ -15,7 +15,10 @@ import {
   getApiMailbox,
   listApiMailboxes,
   deleteApiMailbox,
-  normalizeTtlSeconds
+  normalizeTtlSeconds,
+  listApiMessages,
+  getApiMessageDetail,
+  waitForApiMessage
 } from '../db/index.js';
 import { resolveAuthPayload } from '../middleware/auth.js';
 
@@ -84,7 +87,7 @@ router.post('/api/v1/admin/api-keys', async (c) => {
   try {
     const created = await createApiKey(db, {
       name: body.name,
-      scopes: body.scopes || 'mailboxes:read,mailboxes:write',
+      scopes: body.scopes || 'mailboxes:read,mailboxes:write,messages:read',
       expiresAt
     });
     return c.json(created, 201);
@@ -174,6 +177,85 @@ router.get('/api/v1/mailboxes/:id', async (c) => {
   const mailbox = await getApiMailbox(db, { apiKeyId: auth.apiKey.id, resourceId: c.req.param('id') });
   if (!mailbox) return error(c, 404, 'mailbox_not_found', '邮箱不存在');
   return c.json(mailbox);
+});
+
+router.get('/api/v1/mailboxes/:id/messages', async (c) => {
+  const db = await getDb(c);
+  if (!db) return error(c, 500, 'database_unavailable', '数据库连接失败');
+  const auth = await requireApiKey(c, db, 'messages:read');
+  if (auth.response) return auth.response;
+
+  const mailbox = await getApiMailbox(db, {
+    apiKeyId: auth.apiKey.id,
+    resourceId: c.req.param('id')
+  });
+  if (!mailbox) return error(c, 404, 'mailbox_not_found', '邮箱不存在');
+
+  const messages = await listApiMessages(db, {
+    apiKeyId: auth.apiKey.id,
+    resourceId: c.req.param('id'),
+    limit: c.req.query('limit') || 20,
+    afterId: c.req.query('after_id') || 0
+  });
+  return c.json({ data: messages });
+});
+
+router.get('/api/v1/messages/:id', async (c) => {
+  const db = await getDb(c);
+  if (!db) return error(c, 500, 'database_unavailable', '数据库连接失败');
+  const auth = await requireApiKey(c, db, 'messages:read');
+  if (auth.response) return auth.response;
+
+  const message = await getApiMessageDetail(db, c.env.MAIL_EML, {
+    apiKeyId: auth.apiKey.id,
+    messageId: c.req.param('id')
+  });
+  if (!message) return error(c, 404, 'message_not_found', '邮件不存在');
+  return c.json(message);
+});
+
+router.get('/api/v1/mailboxes/:id/wait', async (c) => {
+  const db = await getDb(c);
+  if (!db) return error(c, 500, 'database_unavailable', '数据库连接失败');
+  const auth = await requireApiKey(c, db, 'messages:read');
+  if (auth.response) return auth.response;
+
+  const resourceId = c.req.param('id');
+  const mailbox = await getApiMailbox(db, {
+    apiKeyId: auth.apiKey.id,
+    resourceId
+  });
+  if (!mailbox) return error(c, 404, 'mailbox_not_found', '邮箱不存在');
+  if (mailbox.status === 'expired') return error(c, 410, 'mailbox_expired', '邮箱已过期');
+
+  const type = String(c.req.query('for') || 'mail').toLowerCase();
+  if (!['mail', 'code', 'link'].includes(type)) {
+    return error(c, 400, 'invalid_wait_type', 'for 仅支持 mail、code、link');
+  }
+
+  const afterId = c.req.query('after_id') || 0;
+  const result = await waitForApiMessage({
+    type,
+    timeoutSeconds: c.req.query('timeout') ?? 20,
+    intervalMs: c.req.query('interval_ms') ?? 1000,
+    filters: {
+      from: c.req.query('from') || '',
+      fromDomain: c.req.query('from_domain') || '',
+      subjectContains: c.req.query('subject_contains') || ''
+    },
+    listMessages: () => listApiMessages(db, {
+      apiKeyId: auth.apiKey.id,
+      resourceId,
+      limit: 20,
+      afterId
+    }),
+    loadDetail: (messageId) => getApiMessageDetail(db, c.env.MAIL_EML, {
+      apiKeyId: auth.apiKey.id,
+      messageId
+    })
+  });
+
+  return c.json(result);
 });
 
 router.delete('/api/v1/mailboxes/:id', async (c) => {

@@ -33,7 +33,7 @@ export function hasScope(apiKey, requiredScope) {
 
 export async function createApiKey(db, {
   name,
-  scopes = 'mailboxes:read,mailboxes:write',
+  scopes = 'mailboxes:read,mailboxes:write,messages:read',
   expiresAt = null
 }) {
   const cleanName = String(name || '').trim();
@@ -42,7 +42,7 @@ export async function createApiKey(db, {
   const rawKey = `fm_live_${randomBase64Url(32)}`;
   const keyHash = await sha256Hex(rawKey);
   const keyPrefix = rawKey.slice(0, 18);
-  const normalizedScopes = parseScopes(scopes).join(',') || 'mailboxes:read,mailboxes:write';
+  const normalizedScopes = parseScopes(scopes).join(',') || 'mailboxes:read,mailboxes:write,messages:read';
 
   await db.prepare(`
     INSERT INTO api_keys (name, key_prefix, key_hash, scopes, expires_at, enabled)

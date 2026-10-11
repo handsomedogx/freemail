@@ -44,3 +44,12 @@ export {
   normalizeTtlSeconds,
   mailboxStatus
 } from './apiMailboxes.js';
+export {
+  listApiMessages,
+  getApiMessageMetadata,
+  getApiMessageDetail,
+  extractLinks,
+  matchesMessageFilter,
+  normalizeWaitOptions,
+  waitForApiMessage
+} from './apiMessages.js';

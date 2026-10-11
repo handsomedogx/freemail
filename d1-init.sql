@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   name          TEXT    NOT NULL,
   key_prefix    TEXT    NOT NULL,
   key_hash      TEXT    NOT NULL UNIQUE,
-  scopes        TEXT    NOT NULL DEFAULT 'mailboxes:read,mailboxes:write',
+  scopes        TEXT    NOT NULL DEFAULT 'mailboxes:read,mailboxes:write,messages:read',
   created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
   last_used_at  TEXT,
   expires_at    TEXT,

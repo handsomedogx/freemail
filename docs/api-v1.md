@@ -12,7 +12,7 @@ curl -X POST "https://your-domain.example/api/v1/admin/api-keys" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-agent",
-    "scopes": "mailboxes:read,mailboxes:write"
+    "scopes": "mailboxes:read,mailboxes:write,messages:read"
   }'
 ```
 
@@ -23,7 +23,7 @@ curl -X POST "https://your-domain.example/api/v1/admin/api-keys" \
   "id": 1,
   "name": "my-agent",
   "key_prefix": "fm_live_xxxxxxxx",
-  "scopes": "mailboxes:read,mailboxes:write",
+  "scopes": "mailboxes:read,mailboxes:write,messages:read",
   "created_at": "2026-10-11 10:00:00",
   "expires_at": null,
   "enabled": 1,
@@ -84,7 +84,65 @@ curl -X DELETE "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID" \
 
 删除时会同时清理该邮箱的邮件记录以及已记录的 R2 EML 对象。
 
-## 5. API Key 管理
+## 5. 读取邮件
+
+列出邮箱中的邮件：
+
+```bash
+curl "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/messages?limit=20" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+读取单封邮件正文：
+
+```bash
+curl "https://your-domain.example/api/v1/messages/$MESSAGE_ID" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+邮件正文来自 R2 中保存的原始 EML。返回值会包含 `text`、`html`、`verification_code` 和仅提取、不自动访问的 `links`。所有外部邮件内容均标记：
+
+```json
+{ "content_trust": "untrusted_external" }
+```
+
+## 6. Agent 等待接口
+
+等待任意一封邮件，最长单次等待 25 秒：
+
+```bash
+curl "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/wait?for=mail&timeout=20" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+直接等待验证码：
+
+```bash
+curl "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/wait?for=code&timeout=20&from_domain=example.com" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+直接等待邮件中的 HTTP/HTTPS 链接：
+
+```bash
+curl "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/wait?for=link&timeout=20" \
+  -H "Authorization: Bearer $MAIL_API_KEY"
+```
+
+支持的筛选参数：`from`、`from_domain`、`subject_contains`、`after_id`。若超时，会返回 JSON：
+
+```json
+{
+  "matched": false,
+  "timeout": true,
+  "type": "code",
+  "waited_ms": 20000
+}
+```
+
+单次等待故意限制在 25 秒以内；未来 MCP 层可以自动重试或改用 Durable Objects / Queue，而不改变上层工具语义。
+
+## 7. API Key 管理
 
 列出 API Key（不会返回明文 Key 或哈希）：
 
@@ -102,4 +160,4 @@ curl -X DELETE "https://your-domain.example/api/v1/admin/api-keys/1" \
 
 ## 当前 V1 范围
 
-当前版本先完成 API Key、邮箱资源隔离和真实 TTL。下一阶段会增加邮件读取、`wait_for_mail` / `wait_for_code`、链接提取、Webhook/事件通知以及 MCP 工具层。
+当前版本已完成 API Key、邮箱资源隔离、真实 TTL、邮件读取、验证码/链接提取和短轮询等待接口。下一阶段会增加 Webhook/事件通知、租约/幂等性、审计日志以及 MCP 工具层。

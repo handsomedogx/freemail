@@ -169,7 +169,7 @@ curl "https://your-domain.example/api/v1/mailboxes/$MAILBOX_ID/wait?for=link&tim
 }
 ```
 
-单次等待故意限制在 25 秒以内；未来 MCP 层可以自动重试或改用 Durable Objects / Queue，而不改变上层工具语义。
+单次等待故意限制在 25 秒以内。Remote MCP 层会复用这一语义，由 Agent 在超时后按需再次调用；后续仍可在不改变上层工具语义的前提下改用 Durable Objects / Queue。
 
 ## 7. API Key 管理
 
@@ -207,4 +207,4 @@ curl "https://your-domain.example/api/v1/admin/audit-logs?action=messages.wait&a
 
 ## 当前 V1 范围
 
-当前版本已完成 API Key、邮箱资源隔离、真实 TTL、邮件读取、验证码/链接提取、短轮询等待、幂等创建、Lease 续期/释放与审计日志。下一阶段可进入 MCP 工具层，并视需要增加 Webhook/事件通知与 Rate Limit。
+当前版本已完成 API Key、邮箱资源隔离、真实 TTL、邮件读取、验证码/链接提取、短轮询等待、幂等创建、Lease 续期/释放与审计日志，并已提供 Remote MCP 工具层。MCP 使用方法见 `docs/mcp.md`；后续可按需要增加 Webhook/事件通知与 Rate Limit。

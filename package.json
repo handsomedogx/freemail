@@ -3,11 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node src/test/test_api_v1.js && node src/test/test_api_messages.js && node src/test/test_api_operations.js && node src/test/test_db_init.js && node src/test/test_subject_decoding.js"
+    "test": "node src/test/test_api_v1.js && node src/test/test_api_messages.js && node src/test/test_api_operations.js && node src/test/test_mcp_protocol.js && node src/test/test_db_init.js && node src/test/test_subject_decoding.js"
   },
   "dependencies": {
-    "hono": "^4.12.18",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "hono": "^4.13.13",
     "postal-mime": "^2.7.4",
-    "sendflare-sdk-ts": "^1.0.5"
+    "sendflare-sdk-ts": "^1.0.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1"
   }
 }

@@ -104,3 +104,34 @@ CREATE TABLE IF NOT EXISTS sent_emails (
 CREATE INDEX IF NOT EXISTS idx_sent_emails_resend_id      ON sent_emails(resend_id);
 CREATE INDEX IF NOT EXISTS idx_sent_emails_status_created ON sent_emails(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sent_emails_from_addr      ON sent_emails(from_addr);
+
+-- ────────────────────────────────────────
+-- API-first：API Key 与其创建的邮箱资源
+-- 明文 API Key 不落库，只保存 SHA-256 哈希
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS api_keys (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT    NOT NULL,
+  key_prefix    TEXT    NOT NULL,
+  key_hash      TEXT    NOT NULL UNIQUE,
+  scopes        TEXT    NOT NULL DEFAULT 'mailboxes:read,mailboxes:write',
+  created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+  last_used_at  TEXT,
+  expires_at    TEXT,
+  enabled       INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS api_mailboxes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  resource_id   TEXT    NOT NULL UNIQUE,
+  api_key_id    INTEGER NOT NULL,
+  mailbox_id    INTEGER NOT NULL UNIQUE,
+  created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE,
+  FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash             ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_enabled          ON api_keys(enabled);
+CREATE INDEX IF NOT EXISTS idx_api_mailboxes_key         ON api_mailboxes(api_key_id, resource_id);
+CREATE INDEX IF NOT EXISTS idx_api_mailboxes_mailbox     ON api_mailboxes(mailbox_id);

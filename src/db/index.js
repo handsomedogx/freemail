@@ -27,3 +27,20 @@ export {
   recordSentEmail,
   updateSentEmail
 } from './sentEmails.js';
+export {
+  createApiKey,
+  authenticateApiKey,
+  listApiKeys,
+  revokeApiKey,
+  extractBearerToken,
+  parseScopes,
+  hasScope
+} from './apiKeys.js';
+export {
+  createApiMailbox,
+  getApiMailbox,
+  listApiMailboxes,
+  deleteApiMailbox,
+  normalizeTtlSeconds,
+  mailboxStatus
+} from './apiMailboxes.js';

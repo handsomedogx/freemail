@@ -8,6 +8,8 @@ import { verifyJwtWithCache, checkRootAdminOverride } from './auth.js';
 
 export function authMiddleware() {
   return async (c, next) => {
+    // API V1 使用独立的 API Key / 管理员鉴权，由 routes/apiV1.js 自己处理。
+    if (c.req.path.startsWith('/api/v1/')) return next();
     const token = c.env.JWT_TOKEN || c.env.JWT_SECRET || '';
     const root = checkRootAdminOverride(c.req.raw, token);
     if (root) { c.set('authPayload', root); return next(); }

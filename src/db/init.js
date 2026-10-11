@@ -45,9 +45,11 @@ async function performFirstTimeSetup(db) {
     await db.prepare('SELECT 1 FROM users LIMIT 1').all();
     await db.prepare('SELECT 1 FROM user_mailboxes LIMIT 1').all();
     await db.prepare('SELECT 1 FROM sent_emails LIMIT 1').all();
-    // 所有5个必要表都存在，执行字段迁移
+    // 核心表存在后，补齐 API-first 扩展表并执行字段迁移
+    await ensureApiTables(db);
     await migrateMailboxesFields(db);
     await migrateSentEmailsFields(db);
+    await createIndexes(db);
     return;
   } catch (e) {
     // 有表不存在，继续初始化
@@ -60,9 +62,41 @@ async function performFirstTimeSetup(db) {
   await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT, role TEXT NOT NULL DEFAULT 'user', can_send INTEGER NOT NULL DEFAULT 0, mailbox_limit INTEGER NOT NULL DEFAULT 10, created_at TEXT DEFAULT CURRENT_TIMESTAMP);");
   await db.exec("CREATE TABLE IF NOT EXISTS user_mailboxes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, mailbox_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, is_pinned INTEGER NOT NULL DEFAULT 0, UNIQUE(user_id, mailbox_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE);");
   await db.exec("CREATE TABLE IF NOT EXISTS sent_emails (id INTEGER PRIMARY KEY AUTOINCREMENT, resend_id TEXT, from_name TEXT, from_addr TEXT NOT NULL, to_addrs TEXT NOT NULL, subject TEXT NOT NULL, html_content TEXT, text_content TEXT, status TEXT DEFAULT 'queued', scheduled_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, provider TEXT NOT NULL DEFAULT 'resend');");
+  await ensureApiTables(db);
   
   // 创建索引
   await createIndexes(db);
+}
+
+/**
+ * API-first 扩展表。与原用户/邮箱体系解耦，便于 Agent/API Key 独立授权。
+ */
+async function ensureApiTables(db) {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      scopes TEXT NOT NULL DEFAULT 'mailboxes:read,mailboxes:write',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_used_at TEXT,
+      expires_at TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS api_mailboxes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      resource_id TEXT NOT NULL UNIQUE,
+      api_key_id INTEGER NOT NULL,
+      mailbox_id INTEGER NOT NULL UNIQUE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE,
+      FOREIGN KEY(mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+    );
+  `);
 }
 
 /**
@@ -83,6 +117,10 @@ async function createIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_resend_id ON sent_emails(resend_id);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_status_created ON sent_emails(status, created_at DESC);`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_sent_emails_from_addr ON sent_emails(from_addr);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_enabled ON api_keys(enabled);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_key ON api_mailboxes(api_key_id, resource_id);`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_api_mailboxes_mailbox ON api_mailboxes(mailbox_id);`);
 }
 
 /**
@@ -221,6 +259,7 @@ export async function setupDatabase(db) {
       provider TEXT NOT NULL DEFAULT 'resend'
     );
   `);
+  await ensureApiTables(db);
   
   // 创建所有索引
   await createIndexes(db);

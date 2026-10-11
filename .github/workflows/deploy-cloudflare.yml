@@ -48,6 +48,9 @@ jobs:
       - name: 📦 安装项目依赖 / Install project dependencies
         run: npm ci
 
+      - name: 🧪 运行测试 / Run tests
+        run: npm test
+
       - name: 📦 安装 Wrangler / Install Wrangler
         run: npm install -g wrangler
 

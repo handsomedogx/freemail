@@ -2,6 +2,9 @@
   "name": "freemail",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node src/test/test_api_v1.js && node src/test/test_subject_decoding.js"
+  },
   "dependencies": {
     "hono": "^4.12.18",
     "postal-mime": "^2.7.4",

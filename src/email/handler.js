@@ -40,6 +40,21 @@ export async function handleEmailEvent(message, env, ctx) {
     const normalizedAddr = normalizeEmailAlias(resolvedAddr);
     const localPart = (normalizedAddr.split('@')[0] || '').toLowerCase();
 
+    // 对显式设置了 expires_at 的邮箱（API V1 临时邮箱）执行真实 TTL。
+    // 旧 Freemail 邮箱 expires_at 为空，因此保持原有 Catch-all/自动创建行为不变。
+    if (normalizedAddr) {
+      const existingMailbox = await DB.prepare(
+        'SELECT id, expires_at FROM mailboxes WHERE address = ? LIMIT 1'
+      ).bind(normalizedAddr).first();
+      if (existingMailbox?.expires_at) {
+        const expiresAt = Date.parse(existingMailbox.expires_at);
+        if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+          message.setReject('Mailbox expired');
+          return;
+        }
+      }
+    }
+
     const mailboxForwardTo = await getForwardTarget(DB, normalizedAddr);
     let result;
     if (mailboxForwardTo) {

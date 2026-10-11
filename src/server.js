@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from './middleware/app.js';
 import authRoutes from './routes/auth.js';
+import apiV1Routes from './routes/apiV1.js';
 import apiRoutes from './routes/api.js';
 import staticRoutes from './routes/static.js';
 import { handleEmailEvent } from './email/handler.js';
@@ -29,6 +30,9 @@ app.route('/', authRoutes);
 
 // 认证中间件
 app.use('/api/*', authMiddleware());
+
+// API-first V1（内部使用独立 API Key 鉴权）
+app.route('/', apiV1Routes);
 
 // 受保护 API 路由（/api/session, /api/*）
 app.route('/', apiRoutes);

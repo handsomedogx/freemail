@@ -1387,3 +1387,273 @@
     background: rgba(15, 23, 42, 0.8);
   }
 }
+
+/* ===========================================
+   API Keys 管理
+   =========================================== */
+.api-keys-section {
+  margin-top: 24px;
+}
+
+.api-keys-card {
+  overflow: hidden;
+}
+
+.api-keys-header {
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.api-keys-description {
+  margin: 8px 0 0 42px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.api-key-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.api-keys-table-wrapper {
+  overflow-x: auto;
+}
+
+.api-keys-table {
+  min-width: 1120px;
+}
+
+.api-keys-table th:nth-child(1) { min-width: 130px; }
+.api-keys-table th:nth-child(2) { min-width: 170px; }
+.api-keys-table th:nth-child(3) { min-width: 280px; }
+.api-keys-table th:nth-child(4),
+.api-keys-table th:nth-child(5),
+.api-keys-table th:nth-child(6) { min-width: 150px; }
+.api-keys-table th:nth-child(7) { min-width: 90px; }
+.api-keys-table th:nth-child(8) { min-width: 90px; }
+
+.api-key-name-cell {
+  font-weight: 600;
+}
+
+.api-key-prefix {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #475569;
+  font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.api-key-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+}
+
+.api-key-scope {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.api-key-time,
+.api-key-muted {
+  color: #64748b !important;
+  font-size: 11px !important;
+}
+
+.api-key-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.api-key-status.is-active {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.api-key-status.is-expired {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+}
+
+.api-key-status.is-revoked {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.api-key-revoke:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.api-key-empty {
+  display: table-cell;
+  padding: 30px 16px !important;
+  color: #94a3b8 !important;
+}
+
+.api-key-modal-card {
+  max-width: 560px;
+}
+
+.api-key-scope-options {
+  display: grid;
+  gap: 10px;
+}
+
+.api-key-scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.8);
+  cursor: pointer;
+}
+
+.api-key-scope-option input {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: #7c3aed;
+}
+
+.api-key-scope-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.api-key-scope-option strong {
+  color: #334155;
+  font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+.api-key-scope-option small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.api-key-secret-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: #92400e;
+  font-size: 13px;
+}
+
+.api-key-secret-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-key-secret-box code {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.api-key-secret-icon {
+  color: #059669;
+  font-weight: 700;
+}
+
+.api-key-secret-footer {
+  justify-content: flex-end;
+}
+
+:root.dark .api-keys-description,
+:root.dark .api-key-time,
+:root.dark .api-key-muted,
+:root.dark .api-key-scope-option small {
+  color: #94a3b8 !important;
+}
+
+:root.dark .api-key-prefix {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+}
+
+:root.dark .api-key-scope {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+:root.dark .api-key-scope-option {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root.dark .api-key-scope-option strong {
+  color: #e2e8f0;
+}
+
+:root.dark .api-key-secret-warning {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+@media (max-width: 768px) {
+  .api-keys-header {
+    flex-direction: column;
+  }
+
+  .api-keys-description {
+    margin-left: 0;
+  }
+
+  .api-key-header-actions {
+    width: 100%;
+  }
+
+  .api-key-header-actions .btn-primary {
+    flex: 1;
+  }
+
+  .api-key-secret-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

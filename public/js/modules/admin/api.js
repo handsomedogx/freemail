@@ -119,6 +119,35 @@ export async function unassignMailbox(username, address) {
   });
 }
 
+async function readJsonOrThrow(response) {
+  let data = null;
+  try { data = await response.json(); } catch (_) { }
+  if (!response.ok) {
+    const message = data?.error?.message || data?.error || `请求失败 (${response.status})`;
+    throw new Error(message);
+  }
+  return data;
+}
+
+export async function getApiKeys() {
+  const response = await api('/api/v1/admin/api-keys');
+  return readJsonOrThrow(response);
+}
+
+export async function createApiKey(data) {
+  const response = await api('/api/v1/admin/api-keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return readJsonOrThrow(response);
+}
+
+export async function revokeApiKey(id) {
+  const response = await api(`/api/v1/admin/api-keys/${id}`, { method: 'DELETE' });
+  return readJsonOrThrow(response);
+}
+
 export default {
   api,
   getUsers,
@@ -127,5 +156,8 @@ export default {
   deleteUser,
   getUserMailboxes,
   assignMailbox,
-  unassignMailbox
+  unassignMailbox,
+  getApiKeys,
+  createApiKey,
+  revokeApiKey
 };

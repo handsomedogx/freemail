@@ -3,9 +3,22 @@
  * @module admin
  */
 
-import { api, getUsers, createUser, updateUser, deleteUser, getUserMailboxes, assignMailbox, unassignMailbox } from './modules/admin/api.js';
+import {
+  api,
+  getUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  getUserMailboxes,
+  assignMailbox,
+  unassignMailbox,
+  getApiKeys,
+  createApiKey,
+  revokeApiKey
+} from './modules/admin/api.js';
 import { formatTime, renderUserRow, renderUserList, generateSkeletonRows, renderPagination } from './modules/admin/user-list.js';
 import { fillEditForm, collectEditFormData, validateEditForm, resetEditState } from './modules/admin/user-edit.js';
+import { renderApiKeyList } from './modules/admin/api-keys.js';
 
 // showToast 由 toast-utils.js 全局提供
 const showToast = window.showToast || ((msg, type) => console.log(`[${type}] ${msg}`));
@@ -76,6 +89,29 @@ const els = {
   mailboxesPageInfo: document.getElementById('mailboxes-page-info'),
   mailboxesPrevPage: document.getElementById('mailboxes-prev-page'),
   mailboxesNextPage: document.getElementById('mailboxes-next-page'),
+
+  // API Key 管理
+  apiKeysSection: document.getElementById('api-keys-section'),
+  apiKeysTbody: document.getElementById('api-keys-tbody'),
+  apiKeysCount: document.getElementById('api-keys-count'),
+  apiKeysLoading: document.getElementById('api-keys-loading'),
+  apiKeysRefresh: document.getElementById('api-keys-refresh'),
+  apiKeysJump: document.getElementById('api-keys-jump'),
+  apiKeyCreateOpen: document.getElementById('api-key-create-open'),
+  apiKeyCreateModal: document.getElementById('api-key-create-modal'),
+  apiKeyCreateClose: document.getElementById('api-key-create-close'),
+  apiKeyCreateCancel: document.getElementById('api-key-create-cancel'),
+  apiKeyCreateSubmit: document.getElementById('api-key-create-submit'),
+  apiKeyName: document.getElementById('api-key-name'),
+  apiKeyExpireDays: document.getElementById('api-key-expire-days'),
+  apiKeyScopeMailboxesRead: document.getElementById('api-key-scope-mailboxes-read'),
+  apiKeyScopeMailboxesWrite: document.getElementById('api-key-scope-mailboxes-write'),
+  apiKeyScopeMessagesRead: document.getElementById('api-key-scope-messages-read'),
+  apiKeySecretModal: document.getElementById('api-key-secret-modal'),
+  apiKeySecretClose: document.getElementById('api-key-secret-close'),
+  apiKeySecretDone: document.getElementById('api-key-secret-done'),
+  apiKeySecretValue: document.getElementById('api-key-secret-value'),
+  apiKeySecretCopy: document.getElementById('api-key-secret-copy'),
   
   // 确认模态框
   confirmModal: document.getElementById('admin-confirm-modal'),
@@ -115,6 +151,160 @@ function initConfirmEvents() {
   });
 }
 initConfirmEvents();
+
+let apiKeyManagerEnabled = false;
+
+async function resolveAdminSession() {
+  if (window.__ADMIN_SESSION__) return window.__ADMIN_SESSION__;
+  try {
+    const response = await fetch('/api/session', { headers: { 'Cache-Control': 'no-cache' } });
+    if (!response.ok) return null;
+    const session = await response.json();
+    window.__ADMIN_SESSION__ = session;
+    window.__STRICT_ADMIN__ = session?.strictAdmin === true;
+    window.__GUEST_MODE__ = session?.role === 'guest';
+    return session;
+  } catch (_) {
+    return null;
+  }
+}
+
+function resetApiKeyCreateForm() {
+  if (els.apiKeyName) els.apiKeyName.value = '';
+  if (els.apiKeyExpireDays) els.apiKeyExpireDays.value = '';
+  if (els.apiKeyScopeMailboxesRead) els.apiKeyScopeMailboxesRead.checked = true;
+  if (els.apiKeyScopeMailboxesWrite) els.apiKeyScopeMailboxesWrite.checked = true;
+  if (els.apiKeyScopeMessagesRead) els.apiKeyScopeMessagesRead.checked = true;
+}
+
+function getSelectedApiKeyScopes() {
+  const scopes = [];
+  if (els.apiKeyScopeMailboxesRead?.checked) scopes.push('mailboxes:read');
+  if (els.apiKeyScopeMailboxesWrite?.checked) scopes.push('mailboxes:write');
+  if (els.apiKeyScopeMessagesRead?.checked) scopes.push('messages:read');
+  return scopes;
+}
+
+async function loadApiKeys() {
+  if (!apiKeyManagerEnabled) return;
+  if (els.apiKeysLoading) els.apiKeysLoading.style.display = 'flex';
+  try {
+    const result = await getApiKeys();
+    const items = Array.isArray(result?.data) ? result.data : [];
+    renderApiKeyList(items, els.apiKeysTbody);
+    if (els.apiKeysCount) els.apiKeysCount.textContent = `${items.length} 个`;
+    bindApiKeyRowEvents();
+  } catch (error) {
+    console.error('加载 API Keys 失败:', error);
+    showToast(error?.message || '加载 API Keys 失败', 'error');
+  } finally {
+    if (els.apiKeysLoading) els.apiKeysLoading.style.display = 'none';
+  }
+}
+
+function bindApiKeyRowEvents() {
+  els.apiKeysTbody?.querySelectorAll('.api-key-revoke:not(:disabled)').forEach(button => {
+    button.onclick = async () => {
+      const id = Number(button.dataset.apiKeyId || 0);
+      if (!id) return;
+      const confirmed = await showConfirm('确定撤销这个 API Key 吗？撤销后使用该 Key 的 Agent 会立即无法访问 API。');
+      if (!confirmed) return;
+
+      button.disabled = true;
+      try {
+        await revokeApiKey(id);
+        showToast('API Key 已撤销', 'success');
+        await loadApiKeys();
+      } catch (error) {
+        button.disabled = false;
+        showToast(error?.message || '撤销失败', 'error');
+      }
+    };
+  });
+}
+
+async function handleCreateApiKey() {
+  const name = String(els.apiKeyName?.value || '').trim();
+  if (!name) {
+    showToast('请输入 API Key 名称', 'warning');
+    els.apiKeyName?.focus();
+    return;
+  }
+
+  const scopes = getSelectedApiKeyScopes();
+  if (!scopes.length) {
+    showToast('至少选择一个 Scope', 'warning');
+    return;
+  }
+
+  const rawDays = String(els.apiKeyExpireDays?.value || '').trim();
+  let expiresInDays;
+  if (rawDays) {
+    expiresInDays = Number(rawDays);
+    if (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 3650) {
+      showToast('过期天数必须是 1-3650 的整数', 'warning');
+      return;
+    }
+  }
+
+  if (els.apiKeyCreateSubmit) els.apiKeyCreateSubmit.disabled = true;
+  try {
+    const payload = {
+      name,
+      scopes: scopes.join(',')
+    };
+    if (expiresInDays) payload.expires_in_days = expiresInDays;
+    const created = await createApiKey(payload);
+    if (!created?.key) throw new Error('服务端未返回 API Key 明文');
+
+    els.apiKeyCreateModal?.classList.remove('show');
+    if (els.apiKeySecretValue) els.apiKeySecretValue.textContent = created.key;
+    els.apiKeySecretModal?.classList.add('show');
+    resetApiKeyCreateForm();
+    await loadApiKeys();
+  } catch (error) {
+    showToast(error?.message || '创建 API Key 失败', 'error');
+  } finally {
+    if (els.apiKeyCreateSubmit) els.apiKeyCreateSubmit.disabled = false;
+  }
+}
+
+function closeApiKeySecretModal() {
+  els.apiKeySecretModal?.classList.remove('show');
+  if (els.apiKeySecretValue) els.apiKeySecretValue.textContent = '';
+}
+
+async function copyApiKeySecret() {
+  const value = String(els.apiKeySecretValue?.textContent || '').trim();
+  if (!value) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    showToast('API Key 已复制', 'success');
+  } catch (_) {
+    showToast('复制失败，请手动选择 Key 复制', 'warning');
+  }
+}
+
+async function initApiKeyManager() {
+  const session = await resolveAdminSession();
+  if (!session?.strictAdmin) return;
+  apiKeyManagerEnabled = true;
+  if (els.apiKeysSection) els.apiKeysSection.style.display = '';
+  if (els.apiKeysJump) els.apiKeysJump.style.display = '';
+  await loadApiKeys();
+}
 
 // 加载用户列表
 async function loadUsers() {
@@ -505,5 +695,30 @@ els.editDelete?.addEventListener('click', async () => {
 els.mailboxesPrevPage?.addEventListener('click', () => { if (mailboxPage > 1) { mailboxPage--; loadUserMailboxes(); }});
 els.mailboxesNextPage?.addEventListener('click', () => { const totalPages = Math.ceil(totalMailboxes / mailboxPageSize); if (mailboxPage < totalPages) { mailboxPage++; loadUserMailboxes(); }});
 
+// API Key 管理
+els.apiKeysRefresh?.addEventListener('click', loadApiKeys);
+els.apiKeysJump?.addEventListener('click', () => {
+  els.apiKeysSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+els.apiKeyCreateOpen?.addEventListener('click', () => {
+  resetApiKeyCreateForm();
+  els.apiKeyCreateModal?.classList.add('show');
+  setTimeout(() => els.apiKeyName?.focus(), 0);
+});
+els.apiKeyCreateClose?.addEventListener('click', () => els.apiKeyCreateModal?.classList.remove('show'));
+els.apiKeyCreateCancel?.addEventListener('click', () => els.apiKeyCreateModal?.classList.remove('show'));
+els.apiKeyCreateSubmit?.addEventListener('click', handleCreateApiKey);
+els.apiKeyCreateModal?.addEventListener('click', (event) => {
+  if (event.target === els.apiKeyCreateModal) els.apiKeyCreateModal.classList.remove('show');
+});
+els.apiKeyName?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') handleCreateApiKey();
+});
+
+els.apiKeySecretCopy?.addEventListener('click', copyApiKeySecret);
+els.apiKeySecretClose?.addEventListener('click', closeApiKeySecretModal);
+els.apiKeySecretDone?.addEventListener('click', closeApiKeySecretModal);
+
 // 初始化
 loadUsers();
+initApiKeyManager();
